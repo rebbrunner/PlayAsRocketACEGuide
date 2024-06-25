@@ -1,4 +1,4 @@
-# Custom Pikachu
+# Play as Rocket Guide Source
 
 author: Rebecca Brunner
 <br>
