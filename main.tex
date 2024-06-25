@@ -1,0 +1,64 @@
+\documentclass[12pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{biblatex}
+\usepackage{subfiles}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{minted}
+\usepackage{hyperref}
+
+\addbibresource{ref.bib}
+\graphicspath{{./images/}}
+
+\title{Customizing Pikachu with Arbitrary Code Execution}
+\author{Rebecca Brunner}
+\date{\today}
+
+\newcommand{\selector}{TimOS}
+
+\begin{document}
+    \begin{titlepage}
+        \vspace*{\fill}
+        \vbox{
+            \clearpage
+            \maketitle
+            \thispagestyle{empty}
+        }
+        \vspace*{\fill}
+        \vspace*{\fill}
+    \end{titlepage}
+
+    \begin{abstract}
+        This guide will provide a full walkthrough of how to setup \textit{Arbitrary Code Execution (ACE)} within \textit{Pokémon Yellow} in order to customize the game loop.  We will alter the game loop to insert custom sprites, alter music, add custom text and so on.  All codes are written for English.  All codes should be compatible with original hardware, accurate emulators, and \textit{virtual console (VC)}.  Codes will provide technical explanation as well as step by step instruction.  It is recommended but not required to have beginner's background with assembly.  For original hardware it is recommended to have a method for save injection.  In order to demonstrate how to use ACE to modify your game, we will be implementing a save file to play as Team Rocket's Jessie and James. \cite{example}.
+    \end{abstract}
+
+    \tableofcontents
+
+    \newpage
+
+    \section{Initial Setup and Environment}
+    \subfile{sections/setup.tex}
+    \newpage
+
+    \section{Script Selector (\selector{})}
+    \subfile{sections/selector.tex}
+    \newpage
+
+    \section{OAM Hijack}
+    \subfile{sections/oam.tex}
+    \newpage
+
+    \section{Persistence}
+    \subfile{sections/persistence.tex}
+    \newpage
+
+    \section{Sprites}
+    \subfile{sections/sprites.tex}
+    \newpage
+
+    \section{Custom Text}
+    \subfile{sections/text.tex}
+    \newpage
+
+    \printbibliography
+\end{document}
