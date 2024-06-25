@@ -1,4 +1,4 @@
-# Custom Pikachu
+# Play as Rocket Arbitrary Code Execution Guide Source
 
 author: Rebecca Brunner
 <br>
