@@ -1,14 +1,23 @@
-\documentclass[../main.tex]{subfile}
+\documentclass[../main.tex]{subfiles}
 
 \begin{document}
     This section will go over initial setup of an environment capable of triggering ACE on demand.  This section will provide resources to exploit the game and trigger ACE, extend ACE to setup a friendly developer environment, and eventually install a full on RAM editor and script selector.
 
     \subsection{4F}
-    This section goes over setting up 4F
+    To start with you're going to want ot setup ACE within your game.  To do so you can follow the excellent set of guides provided by Discord GCRI member Timo.  See the guide listed in the references\cite{gen1setup}.  If you are more of a visual learner you may refer to Timo's video guides\cite{gen1videosetup}.
 
     \subsection{RAM Editor}
-    This section goes over setting up the RAM editor + \selector{}.
+    Once you have finished your 4F install, install the RAM writer and script selector \textit{(TimOS)}.  See the reference section for a link to the code\cite{timos}.  Once you have the RAM writer, grab your pikachu and proceed through the game as normal until you get the pokédex to avoid softlocks.  Enter the PC in Viridian so we have access to a PC.
 
     \subsection{Mass Clear a Box}
-    TODO
+    We're going to write our exploit to the current active box since it has an extremely large amoung of free space to work with.  Before we begin, make sure to switch your active box to one that you want to use for your exploit.  After that we're going to clear it.  We only need to run this code once, so we're going to use a temporary free space to write a quick script to clear the box for us.
+
+    The trainer buffer is a temporary space in RAM that is overwritten whenever you have an encounter with an opponent trainer.  It's a great place to write one-time codes and begins at d89d.  Use the freshly installed RAM writer and use the following code to clear the box:
+
+    \begin{minted}[linenos]{text}
+AF          ; xor a         ; zeros a register
+01 60 04    ; ld bc,0460    ; load bc with the number of bytes to clear
+21 7F DA    ; ld hl,da7f    ; address where active box begins
+C3 6E 16    ; jp 166e       ; Jump to FillMemory
+    \end{minted}
 \end{document}
