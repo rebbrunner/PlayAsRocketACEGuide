@@ -4,11 +4,29 @@
     As part of the setup for this guide, you should have installed a script selector.  This selector comes with the RAM writer and nickname writer pre-installed, however, we can extend the selector to be able to easily bind our own script.  In this section, we will be binding a code to allow us to steal opponent's pokemon to a new slot on the selector.
 
     \subsection{Overview of TimOS}
-    TODO
+    As part of the setup you should have installed the RAM Writer along with a script selector the GCRI community has affectionally dubbed \textit{TimOS} after its creator Timo.  \timos{} allows us to quickly execute stored codes.  Two codes are installed by default - the first being the RAM writer in slot 1 and the second being the Nickname Writer in slot 2.  The number of scripts can be extended to support however many scripts you can fit within the operating range from C6E8 to CB49.  Let's quickly review how this script works.
 
     \subsection{Adding new scripts to TimOS}
-    TODO
+    To start with, the number of selectable scripts is stored at C6E9.  This is an index for a jump table with the list of scripts.  The jump table is located at C7C0.  So for example if we select to execute the 2nd script, the jump table will be indexed for the 3rd byte or 2nd address since a single address is two bytes.  So to add an additional script, we first increment our selector by 1, then append the address of our new script to the jump table.  The address should be within the operation range of \timos{} as mentioned above in the overview.
 
     \subsection{How to Steal Pokemon}
-    TODO
+    Taking this approach, let's extend \timos{} to add a script to steal the opponent's pokémon during a battle.  Pop open the RAM writer and navigate to value C6E9 (Refer to the install instructions for controls \cite{timos}).  Increase the number of scripts from 2 to 3.  Next pop over to the jump table at C7C0.  Find the last value which should point to the nickname writer at D669.  We want to add our new script to a place \timos{} will save.  Everything below the jump table up to CB49 is free, but let's try and be mindful of our jump table growing.  For this guide I will decide to start our custom codes at C800.  To specify this I put 00 at C7C4 and C8 at C7C5 in our jump table.  At C800 I put C9 which is the opcode for return.  Let's test our setup.
+
+    Save your game, then view your trainer card to navigate your SRAM bank off your save data in case we crash \cite{crashTypes}.  Use 4F to launch \timos{} and trigger script 3.  If nothing happens, our setup was successful.  If not, double check your jump table and addresses align.  Once you have confirmed your setup is working, let's adjust the code at C800 to allow us to steal pokémon.
+
+    \subsubsection{Battle Type}
+    There are three types of battles in pokémon games: wild battles, trainer battles and safari battles.  What type of battle you are in is determined by a variable in RAM and can easily be adjusted live in a battle.  Simply changing a trainer battle to a wild battle enables us to steal pokémon by throwing a pokéball at it.  This will also automatically end the battle since wild pokémon are one off encounters.  It's ideal to have this as a toggle so we can toggle it on whenever we see a desirable pokémon in a fight.  To do this, put this code at C800:
+
+    \begin{minted}[linenos]{text}
+3E 01           ; ld a,01           ; Load register a with 1
+                                      which is the value for a
+                                      wild battle
+EA 56 D0        ; ld (D056),a       ; Load the value of address
+                                      D056 with a.  D056 is the 
+                                      battle type
+C9              ; ret               ; End and return to normal
+                                      gameplay.
+    \end{minted}
+
+    It's time to test our code!  Get yourself into any trainer battle and try using script 3.  It will consume one turn of battle, but you should be able to throw a pokéball at your opponent and attempt to catch their pokémon.  This is our first step towards making our \textit{Play As Rocket} save file, and we will be extending \timos{} further as we go along.  
 \end{document}
