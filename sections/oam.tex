@@ -1,20 +1,127 @@
 \documentclass[../main.tex]{subfiles}
 
 \begin{document}
-    The OAM routine is a routine called every animation frame of the gen 1 and gen 2 pokemon games.  It is responsible for updating sprites, allowing them to move and be drawn to screen.  As the function runs every animation frame, if we insert a custom jump point into the routine we can, "hijack," the routine to run ACE every frame.  This is ideal for modifying the game's loop and adding, "event listeners," which will trigger whenever a certain action happens.  In this section we will be going over the OAM routine and how to hijack it.  For a practical example, we will be porting a gen 2 code developed by Timo to add a run button to the generation 1 games.
-
-    \subsection{The OAM Routine}
-    TODO
+    The OAM routine is a routine called every animation frame of the gen 1 and gen 2 pokemon games.  It is responsible for updating sprites, allowing them to move and be drawn to screen.  As the function runs every animation frame, if we insert a custom jump point into the routine we can \textit{hijack} the routine to run ACE every frame.  This is ideal for modifying the game's loop and adding \textit{event listeners} which will trigger whenever a certain action happens.  In this section we will be going over the OAM routine and how to hijack it.  For a practical example, we will be porting a gen 2 code developed by Timo to add a run button to the generation 1 games.
 
     \subsection{Self installing Hijack}
-    TODO
+    By hijacking the OAM routine we can create a payload that executes on every single frame of the game.  The OAM routine begins at FF80 and can be overwritten simply by jumping to a custom location.  Let's for example jump to DA80, a point in the current active box.  At DA80 itself simply put `C9' for `ret' to end our script immediately and return.  at FF80 enter `C9' at first - this ensures we safely return as we type our code.  After C9 enter `80 DA' for our jump address, then change C9 to `C3' to jump to DA80.
+
+    Once you return to normal gameplay, you will notice your character is invisible and sprites seem to have broken.  This is because the OAM routine is responsible for updating sprites each frame.  In order to make the game perform as expected, we need to ensure the OAM routine actually runs while maintaining control.  To do so we are going to do the following:
+
+    \begin{enumerate}
+        \item Restore FF80 back to its original values
+        \item Call FF80 to perform the OAM routine - call will return us back to our payload so we maintain control
+        \item Edit FF80 back to jump to our payload section
+    \end{enumerate}
+
+    Performing the above will allow us to update sprites as expected while maintaining control.  To do the above enter the following at FF80, ensuring to adjust FF80 itself \textit{last} to prevent crashing.
+
+    \begin{minted}[linenos,breaklines]{text}
+3E 3E           ; ld   a,3E
+E0 80           ; ld   (ff00+80),a
+3E C3           ; ld   a,C3
+E0 81           ; ld   (ff00+81),a
+3E E0           ; ld   a,E0
+E0 82           ; ld   (ff00+82),a
+CD 80 FF        ; call FF80
+3E C3           ; ld   a,C3
+E0 80           ; ld   (ff00+80),a
+3E 80           ; ld   a,80
+E0 81           ; ld   (ff00+81),a
+3E DA           ; ld   a,DA
+E0 82           ; ld   (ff00+82),a
+C9              ; ret  
+    \end{minted}
+
+    If everything goes correctly, your character will reappear and sprites will begin to move again.
 
     \subsection{Preventing Crashes}
-    TODO
+    We have our payload located in the current PC box - this creates a problem.  If we switch our active box to a different one we will inevitably crash.  Let's modify our code to disable if the box is not set to where our payload is stored.  We'll store this code snippet outside the active box in leftover daycare data.  At DA49 enter the following:
 
-    \subsection{Adding a run Button}
-    TODO
+    \begin{minted}[linenos,breaklines]{text}
+FA 80 DA            ; ld a,(D580)       ; load a with the first
+                                          byte of our payload
+D6 CD               ; sub a,CD          ; check the first value
+                                          of our payload is a
+                                          jump.
+CA 80 DA            ; jp z,DA80         ; If yes, jump to DA80
+                                          the location of our
+                                          payload
+3E 3E               ; ld   a,3E         ; Otherwise we fix the
+                                          OAM hijack back to
+                                          the original state
+E0 80               ; ld   (ff00+80),a
+3E C3               ; ld   a,C3
+E0 81               ; ld   (ff00+81),a
+3E E0               ; ld   a,E0
+E0 82               ; ld   (ff00+82),a
+C9                  ; ret
+    \end{minted}
+
+    You'll notice the end of this code is identical to our pay load - let's leverage this to shorten our payload.  Restart the game to disable our OAM hack.  Flip to our payload and adjust to this:
+
+    \begin{minted}[linenos,breaklines]{text}
+CD 51 DA        ; call DA51             ; call our snippet that
+                                          fixes OAM
+CD 80 FF        ; call FF80
+3E C3           ; ld   a,C3
+E0 80           ; ld   (ff00+80),a
+3E 49           ; ld   a,49
+E0 81           ; ld   (ff00+81),a
+3E DA           ; ld   a,DA
+E0 82           ; ld   (ff00+82),a
+C9              ; ret  
+    \end{minted}
+
+    Once you have everything setup try switching boxes.  If all is correct you shouldn't crash, and if you inspect FF80 it should be switched back to the original value.  Change your box back to your pay load and renable the hack by setting FF80 to jump to DA49 again.
 
     \subsection{Adding a toggle to our script selector}
-    TODO
+    Having to manually set FF80 everytime we switch boxes is a pain.  Let's extend \timos{} to add a new script to enable our hack.  The nice thing about our hack is it is self installing - simply executing from DA80 will setup FF80 for us, so our script is simply jumping to DA80.
+
+    Just like in the prior chapter, start by incrementing C6E9.  Then head to our jump table at C7C0.  Our prior script should have ended at C805 so go ahead and add 06 at C7C6 and C8 and C7C7 for our new jump location.  Finally, at C806 add: `C3 80 DA' to jump to our self-installing payload.
+
+    To test, go ahead and swap boxes to disable our OAM hijack then immediately swap back.  Run script 4.  If all went well FF80 should be set to jump to DA49.  Congratuations, you have now setup a structure to automatically call our payload every frame.  This is the heart of our project and where we will be inserting all our codes from now on.  To round up this chapter, let's do something simple.
+
+    \subsection{Adding a run Button}
+    The ability to run when you hold the b button down was a major QoL upgrade to the series added in the third installment.  Let's modernize our gen 1 titles and add the same feature here.  This code is predominantly a port of Timo's gen 2 code \cite{runbutton}.  This code gets inserted at DA92 after our hijack:
+
+    \begin{minted}[linenos,breaklines]{text}
+F0 B4           ; ld a,(ff00+b4)          ; load the current
+                                            joypad button state
+E6 02           ; and a,02                ; check lower byte to
+                                            see if it is equal
+                                            to 2, which
+                                            represents the b
+                                            button
+28 0B           ; jr z,0B                 ; if the b button
+                                            is not being held,
+                                            skip to return
+FA C4 CF        ; ld a,(CFC4)             ; load the current
+                                            player animation
+                                            state (new for gen
+                                            1)
+A7              ; and a                   ; we're checking if 
+                                            the value is 0
+20 08           ; jr nz,08                ; if our animation
+                                            state is not zero
+                                            skip to the end -
+                                            this prevents
+                                            breaking the
+                                            overworld gameloop
+                                            - a fun quirk of
+                                            gen 1
+F0 B4           ; ld a,(ff00+b4)          ; load the current
+                                            joypad state
+3D              ; dec a                   ; decrease our value
+                                            by 1 - 1 is biking
+E6 01           ; and a,01                ; clear high byte of
+                                            a
+EA FF D6        ; ld (D6FF),a             ; load current
+                                            movement state with
+                                            01
+C9              ; ret                     ; end and return
+                                            to normal gameplay
+    \end{minted}
+
+    If all goes well holding b will allow you to run.  Pressing b after beginning to move will have a small delay window as our code waits for our current walk cycle to end before applying the code.  The problem with our current setup is that everytime we restart the game we have to use our toggle to enable our code.  It would be nice if we didn't have to do this, which is why our next chapter will go over how to make our setup persistent through resets.
 \end{document}
