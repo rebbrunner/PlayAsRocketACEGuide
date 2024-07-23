@@ -4,11 +4,73 @@
     At this point, every time you reboot your game you will have to re-toggle your hack.  In this section we will be making our OAM hijack persistent - as in the game will automatically restore our hijack after resets.  We will end the section by overriding the encounter music that plays when walking up to a trainer after being spotted.
 
     \subsection{Map Scripts}
-    TODO
+    Every map contains what is called a \mapheader{}.  The \mapheader{} points to all data related to the map, including scripts.  The pointer to scripts is dynamic and stored in RAM as it changes on map load, but at the same time persists through saves because the game remembers what map you were on when you saved.  Additionally, the map script pointer is called once per frame.  All of these facts make this an ideal place to setup a persistent OAM hijack.  Let's run down how this works:
+
+    \begin{enumerate}
+        \item When our character saves, we update the map script pointer to point to our self-installing payload.  Otherwise we modify it back.  Our storage location for the original pointer should persist with saves
+        \item When our game saves the pointer to our self-installing payload is saved
+        \item After we reset, the self-installing payload is loaded and our OAM activates
+        \item Since our map script pointer only overwrites when we are saving, the original map script pointer is restored
+    \end{enumerate}
 
     \subsection{Creating a Persistent Hijack}
-    TODO
+    Alright let's implement this into our setup.  In your OAM hijack input the following (thanks to TimoVM for providing optimizations):
+
+    \begin{minted}[linenos,breaklines]{text}
+F0 B0     ldh a, ($FFB0)
+A7        and a, a                          ; If not on overworld, set z flag
+21 6E D3  ld hl, wCurMapScriptPointer + 1   ; Target high byte
+11 XX XX  ld de, $XXXX                      ; Address where pointer is stored. set to somewhere in unused memory
+3A        ldd a, (hl)
+20 15     jr nz,15                          ; If we're in a menu, continue
+FE ZZ     cp $ZZ                            ; Should point to a WRAM address's high byte
+28 1A     jr z                              ; If pointer is already set to custom value, stop here
+FA 30 CC  ld a, ($CC30)
+FE 73     cp $73
+20 13     jr nz                             ; Is SAVE being highlighted in the start menu? if yes, continue
+2A        ldi a, (hl)
+12        ld (de), a
+13        inc de
+3A        ldd a, (hl)
+12        ld (de), a                        ; Store map script pointer in memory
+3E YY     ld a, $YY
+22        ldi (hl), a
+36 ZZ     ld (hl), $ZZ                      ; Overwrite map script pointer to address ZZYY
+FE ZZ     cp $ZZ                            ; If we jumped here, check if pointer has custom value. If yes, restore original map script pointer
+20 05     jr nz                             ; Also includes a dirty hack, as long as YY != ZZ, a return is guaranteed if we slide through from the previous section
+1A        ld a, (de)
+13        inc de
+22        ldi (hl), a
+1A        ld a, (de)
+32        ldd (hl), a
+C9        ret
+    \end{minted}
+
+    If your setup works, you should be able to run after soft resetting.  Test this is working as expected before continuing.
 
     \subsection{Modifying Encounter Music}
-    TODO
+    To round out this section we're going to modify the encounter music when we enter line of sight for opponents.  At the end of your OAM pay load enter the following:
+
+    \begin{minted}[linenos,breaklines]{text}
+18 01		; jr,01		        ; Skip variable
+00		    ; x		            ; Variable, should be at DAD2, if not adjust D2 DA throughout this script to the proper location
+FA 2D CD	; ld a,(CD2D)	    ; Determine if an encounter has started
+D6 6F		; sub a,6F	        ; If encounter is a high number a battle encounter has started
+38 18		; jr c,18		    ; Skip if not in an encuonter
+FA D2 DA	; ld a,x		    ; Load a variable to keep track of whether music has been started
+D6 01		; sub a,01
+28 16		; jr z,16		    ; Skip starting music if started
+CD 33 22	; call 2233	        ; StopMusic
+0E 20		; ld c,20		    ; Bank with music
+3E 9C		; ld a,9C		    ; Music address
+CD 11 22	; call 2211	        ; PlayMusic
+3E 01		; ld a,01
+EA D2 DA	; ld x,a		    ; Set variable as music has started
+18 05		; jr 05		        ; Skip variable reset
+3E 00		; ld a,00
+EA D2 DA	; ld x,a		    ; Reset variable
+C9		    ; ret
+    \end{minted}
+
+    Now when you encounter an opponent trainer you should get the Jessie \& James encounter music.  Alright, we are now entirely done with our setup, now we will move on to some of the more complex codes like editing sprites and custom text for pikachu.
 \end{document}
