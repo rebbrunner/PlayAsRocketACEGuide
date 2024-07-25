@@ -1,20 +1,115 @@
 \documentclass[../main.tex]{subfiles}
 
 \begin{document}
-    In this section we are going to be overriding sprites as part of our OAM hijack.  We will start by briefly going over how sprites are processed and end by overriding the overworld sprite, backsprite, and front sprites.  For those on original hardware without access to save injection, we will provide alternative options that should be more accessible than entering 300 or so bytes in by hand.
+    In this section we are going to be overriding sprites as part of our OAM hijack.  We will start by briefly going over how sprites are processed and end by overriding the overworld sprite, backsprite, and front sprites.  For those on original hardware without access to save injection, we will provide alternative options that should be more accessible than entering 300 or so bytes in by hand.  If you don't care for the technical details you can skip to the overworld sprites section \ref{owsprites}.
 
     \subsection{Decompression}
-    TODO
+    Every sprite in ROM is stored compressed to save space.  When a sprite needs to be loaded, the game first starts by decompressing the sprite.  For a detailed look at the decompression algorithm, please refer to \textit{Retro Game Mechanics Explained}'s YouTube channel for an in-depth analysis \cite{decompalgo}.  Decompressed sprites are temporarily loaded into the \textit{sprite buffers} stored in SRAM bank 0.  Sprites consist of several \textit{bit planes} and each bit plane is stored in different sprite buffers (there are 3 buffers, sprite buffer 0, 1, and 2).
 
     \subsection{Interlacing}
-    TODO
+    In order to form the full sprite, the two bitplanes must be combined.  This is done by \textit{interlacing} each sprite buffer together within the limits of the 3 sprite buffers.  The algorithm is rather simple, for each byte of the bitplane (which is half the size of the full sprite), the game will take the associated index from the first sprite buffer, append the associated indexed byte from the second buffer to it and put it at the end of the full sprite.  Essentially, it interweaves the two sprites together to form the full sprite.  Once the full sprite has been combined, the game slowly copy the sprite to VRAM (the screen) every screen refresh/frame (\textit{vblank}).
 
-    \subsection{Overworld Sprite}
-    TODO
+    \subsection{Dealing with Vblank interrupts}
+    The nice thing about all we have explained above, is we don't have to do any of it!  The game provides all the functions we need to decompress and load sprites ourselves without dealing with the complexity of the algorithms themselves.  There is one catch, however.  The algorithm that loads the full sprite to VRAM waits for a screen refresh to copy data.  Our payload is \textit{in} a screen refresh, which ultimately means our code will hang indefinitely waiting for the next refresh.  Huge thank you to Diabl0w from the GCRI Discord server for coming up with the workaround on this one, as the initial code for this section involved loading the sprites manually.
+
+    There are two opcodes that can help us circumnavigate this problem, \textit{ei} and \textit{di}.  EI stands for \textit{enable interrupt} while similarly DI stands for \textit{disable interrupt}.  By enabling interrupts before we load our sprite, additional screen refreshes will be allowed to occur and our function will continue.  However, this creates a new problem.  With each screen refresh our code will get called again, again, and again.  To prevent this we need to set a boolean flag our code is running.  If our code is already executing, end our payload and let the copy function finish before performing any additional work.
+
+    \subsection{Overworld Sprite}\label{owsprites}
+    With all of the technical explanation out of the way, let's go ahead and start with something simple - we're going to use some existing sprites already in ROM to overwrite Red and Pikachu's overworld sprites to be Jessie \& James.  At the current end of our payload input the following:
+
+    \begin{minted}[linenos,breaklines]{text}
+18 01           ; jr 01                 ; jump over variable
+00              ; x variable            ; should be at DAF9, if not adjust F9 DA throughout this code
+FA 88 88        ; ld a,(8888)           ; location of walking sprite
+D6 38           ; sub a,38              ; check if Red's walking sprite is loaded
+20 42           ; jr nz,42              ; If Red's sprite not loaded jump to end
+F0 44           ; ld a,(ff00+44)        ; check if vblank determinator is 0 - this is to prevent freeze on loading
+A7              ; and a
+C8              ; ret z                 ; If vblank has not occurred exit
+21 F9 DA        ; ld hl,DAF9            ; x variable location (if we are running)
+7E              ; ld a,(hl)
+A7              ; and a
+C0              ; ret nz                ; if we are running exit function
+36 01           ; ld (hl),01            ; otherwise set as running
+FB              ; ei                    ; enable interrupts
+01 0C 3F        ; ld bc,3F0C            ; 3F is the ROM bank our sprite is in, 0C is to write 12 tiles
+11 6F 6F        ; ld de,6F6F            ; load our source location at 6F6F
+21 00 80        ; ld hl,8000            ; Red's sprite
+CD FE 15        ; call 15FE             ; Call CopyVideoData
+01 0C 3F        ; ld bc,3F0C
+11 2F 70        ; ld de,702F            ; Jessie's walking sprite
+21 00 88        ; ld hl,8800            ; Walking sprite location
+CD FE 15        ; call 15FE
+01 0C 3F        ; ld bc,3F0C
+11 EF 70        ; ld de,70EF            ; James sprite
+21 C0 80        ; ld hl,80C0            ; Pikachu sprite
+CD FE 15        ; call 15FE
+01 0C 3F        ; ld bc,3F0C
+11 AF 71        ; ld de,71AF            ; James' walking sprite
+21 C0 88        ; ld hl,88C0            ; Pikachu's walking sprite
+CD FE 15        ; call 15FE
+F3              ; DI                    ; disable interrupts
+AF              ; xor a                 ; zero a
+EA F9 DA        ; ld (DAF9),a           ; set running to false
+C9              ; ret                   ; Exit and return to normal gameplay safely
+    \end{minted}
 
     \subsection{Trainer Card}
-    TODO
+    The trainer card is significantly more tricky and you may feel free to skip this section if you want to save space.  The tricky part is that the Jessie and James sprite is much bigger than the sprite Red uses on the card and it ends up bleeding into badge space.  Because of this, it would be ideal if we had control over how the sprite buffers are being loaded into VRAM.  Unfortunately, loading and interlacing are done simultaneously for speed meaning we have practically no control over how elements are loaded without manually implementing our own interlace and loading functionality.  If you would like to make a custom trainer card, we must segregate out the interlace from the load so we have greater control.  There will be a small amount of lag on loading the card.  For starters, let's create an interlace function by modifying the \textit{CopyData} function (located at 00B1).
+
+    \begin{minted}[linenos,breaklines]{text}
+18 18           ; jr 18             ; jump over helper function
+78              ; ld a,b
+A7              ; and a
+28 0C           ; jr z,0C
+79              ; ld a,c
+A7              ; and a
+28 01           ; jr z,01
+04              ; inc b
+CD 55 DB        ; call db55         ; this code is expected at db45, adjust as necessary - this is 10 down from the start
+05              ; dec b
+20 FA           ; jr nz,FA
+C9              ; ret
+2A              ; ldi a,(hl)        ; should be at DB55
+12              ; ld (de),a
+13              ; inc de            ; This is the modification - we leave one byte of space between copied bytes and double the total amount of space
+13              ; inc de
+0D              ; dec c
+20 F9           ; jr nz,F9
+C9              ; ret
+C9              ; ret               ; the first jump relative skips here, ending for safety
+    \end{minted}
+
+    One we have our interlace function, everything else is fairly straightforward.  Instead of using vblanks to copy, we are going to temporarily disable the screen.  As this happens when you open your trainer card normally this won't be distracting.
+
+    \begin{minted}[linenos,breaklines]{text}
+FA A1 91            ; ld a,(91A1)               ; check if Red sprite loaded
+D6 AC               ; sub a,AC
+20 3A               ; jr nz,3A                  ; skip to the end if not loaded
+CD 61 00            ; call 0061                 ; disable LCD
+3E 13               ; ld a,13                   ; ROM bank for sprite
+11 81 7C            ; ld de,7C81                ; address of sprite
+CD E3 36            ; call 36E3                 ; UncompressFromDE
+3E 00               ; ld a,00
+CD 99 3E            ; call 3E99                 ; open SRAM bank 0 where sprite buffers are
+01 88 01            ; ld bc,0188                ; load with half the size of the sprite
+21 88 A1            ; ld hl,A188                ; source (sprite buffer 1)
+11 00 A0            ; ld de,A000                ; destination (sprite buffer 0)
+CD 45 DB            ; call DB45                 ; call our interlace function, change if not at DB45
+01 88 01            ; ld bc,0188
+21 10 A3            ; ld hl,A310                ; sprite buffer 2
+11 01 A0            ; ld de,A001                ; since our interlace leaves blank spots this will weave the two sprites together
+CD 45 DB            ; call DB45
+01 00 02            ; ld bc,200                 ; two rows in VRAM where Red sprite normally is
+21 70 A0            ; ld hl,A070                ; source, offset by 70 bytes to cutoff last few tiles
+11 00 90            ; ld de,9000
+CD B1 00            ; call 00B1                 ; call CopyData and copy to 9000 in VRAM
+CD A9 3E            ; call 3EA9                 ; close SRAM
+CD 7B 00            ; call 007B                 ; enable LCD
+C9                  ; ret                       ; return back to normal gameplay
+    \end{minted}
 
     \subsection{Backsprite}
     TODO
+
 \end{document}
