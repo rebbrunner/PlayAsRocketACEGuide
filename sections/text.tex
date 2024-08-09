@@ -4,11 +4,161 @@
     This final section will go over how to create custom text.  We will be overriding the popup window for Pikachu.  We will take advantage of Pikachu's friendship as well as emotes to fully customize your travelling companion.  In this case, we will be turning Pikachu into James and giving him custom dialogue.
 
     \subsection{Text Scripting}
-    TODO
+    To start off with - the easiest way to work with text is to leverage the in-game text scripting system.  Essentially, whenever the game wants to print text it enters a macro mode in order to make life easier.  This macro mode has shortcuts to do certain actions such as scroll lines, pause, wait for button presses, etc.  These commands are stored alongside text.  For a complete reference of all macros refer to the text macro code in the dissassembly.  This will not be linked and needs to be searched (in case Nintendo decides dissassemblies are worth trying to take to court).  In order to actually print text, every text event is stored in a jump table when a new map is loaded.  We will be hijacking the text as follows:
 
-    \subsection{Textboxes}
-    TODO
+    \begin{enumerate}
+        \item Check if we are talking to pikachu, if so:
+        \item Store the current address for the text jump table in a safe, persistent location such as daycare data
+        \item Overwrite the address for the text jump table
+        \item Create a custom jump table with addresses pointing to our text
+    \end{enumerate}
+
+    This will get us to the point where we can load custom text data.  However, we need to do some additional structure within our text data.  We are storing our text pointer in a safe location and need to make sure we restore it when our text is done printing.  We can do this by using a text macro that returns us to assembly.  Here is the general structure for our text data:
+
+    \begin{itemize}
+        \item \textbf{00:} macro to begin text data
+        \item custom text here
+        \item \textbf{50:} End text
+        \item \textbf{08:} Text command to switch to asm code
+        \item Load the original pointer for the text jump table back to its original position
+        \item Jump to the function to end text mode
+    \end{itemize}
+
+    Additionally for fun, we can leverage the pikachu friendship mechanics to change which text expression we load, and can also call emotes to add personality.  If you do not have access to save injection, feel free to skip the friendship mechanics and keep to just one text script to keep things light.
+
+    \subsection{Python Mapping}
+    To make life simpler here is a python script to map English text to their proper hex values:
+
+    \begin{minted}[linenos,breaklines]{python}
+map = {'A': '80', 'B': '81', 'C': '82', 'D': '83', 'E': '84', 'F': '85', 'G': '86', 'H': '87', 'I': '88', 'J': '89', 'K': '8A', 'L': '8B', 'M': '8C', 'N': '8D', 'O': '8E', 'P': '8F', 'Q': '90', 'R': '91', 'S': '92', 'T': '93', 'U': '94', 'V': '95', 'W': '96', 'X': '97', 'Y': '98', 'Z': '99', '(': '9A', ')': '9B', ':': '9C', ';': '9D', '[': '9E', ']': '9F', 'a': 'A0', 'b': 'A1', 'c': 'A2', 'd': 'A3', 'e': 'A4', 'f': 'A5', 'g': 'A6', 'h': 'A7', 'i': 'A8', 'j': 'A9', 'k': 'AA', 'l': 'AB', 'm': 'AC', 'n': 'AD', 'o': 'AE', 'p': 'AF', 'q': 'B0', 'r': 'B1', 's': 'B2', 't': 'B3', 'u': 'B4', 'v': 'B5', 'w': 'B6', 'x': 'B7', 'y': 'B8', 'z': 'B9', ' ': '7F', '?': 'E6', '!': 'E7', '.': 'E8'}
+convert = lambda x: ''.join([map[c] for c in x])
+
+if __name__ == '__main__':
+    x = input("Enter text to convert: ")
+    print(convert(x))
+    \end{minted}
+
+    This doesn't cover every possibility, for the complete English character encoding you can refer to the bulbapedia entry on character encoding \cite{bulbTextEncoding}.
 
     \subsection{Custom Text}
-    TODO
+    Alright, here is the complete code for custom text including pikachu friendship and emotes + text data.
+
+    \subsubsection{Override the Jump Tables and call Custom Text}
+    \begin{minted}[linenos,breaklines]{text}
+jr 01		    skip variable
+x		        variable x
+ld a,(ff8c)	    Check ff8c, if value = d4 talking to pikachu
+sub a,d4
+ret nz
+ld a,1
+ld (d124),a
+ld bc,0002
+ld hl,d36b	    copy text pointer (d36b) to temp location
+ld de,x
+call 00b5
+ld hl,d36b	    ld with custom text pointer
+ld (hl),zz	    yyzz = address of jump table
+inc hl
+ld (hl),yy
+ld a,(d46f)	    load current Pikachu happiness
+sub a,55	    split into 3rds for 3 text pointers based on friendship
+jr nc,04
+ld a,01		    Text pointer 1 (minimum friendship/under first third)
+jr 0B		    Skip to end of friendship check
+sub a,55
+jr nc,04
+ld a,02
+jr 02
+ld a,03
+ld (ff8c),a	    ld ff8c with first address in jump table located at text pointer
+call 3010
+jp 231c to print text
+    \end{minted}
+
+    \subsubsection{ASM for Text Data}
+    This is an overview of what your text data should look like
+
+    \begin{minted}[linenos,breaklines]{text}
+00		start
+50		end
+08		switch from text mode to asm
+ld a,x		restore text pointer
+ld (d36b),a
+ld a,x+1
+ld (d36c),a
+ld b,3F		ROM bank for emotes
+ld hl,<here+1>	Set return address
+jp 3e84		Bankswitch
+ld a,01		Emote
+call 4FA2	ShowEmote
+jp 23D2		EndTextMode
+    \end{minted}
+
+    \subsubsection{Raw, Complete Hex For Convenient Copy and Pasting}
+    Make sure to verify the jump table and its values align where with the \textit{TEXT} sections fall within memory.  Text pointer is saved to daycare data.
+
+    \begin{minted}[linenos,breaklines]{text}
+FA 8C FF
+D6 D4
+C0
+3E 01
+EA 24 D1
+01 02 00
+21 6B D3
+11 31 DB
+CD B5 00
+21 6B D3
+36 70
+23
+36 DB
+FA 6F D4
+D6 55
+30 04
+3E 01
+18 0A
+D6 55
+30 04
+3E 02
+18 02
+3E 03
+EA 8C FF
+CD 10 30
+C3 1C 23
+76 DB
+AC DB
+03 DC
+TEXT: 00 	89 80 8C 84 92 9C 7F 98 A4 B2 E6 4F 96 A7 A0 B3 7F A8 B2 7F A8 B3 E6	 50 08
+FA 31 DB
+EA 6B D3
+FA 32 DB
+EA 6C D3
+06 3F
+21 A4 DB
+C3 84 3E
+3E 01
+CD A2 4F
+C3 D2 23
+TEXT: 00	89 80 8C 84 92 9C 7F 88 7F B3 A7 A8 AD AA 4F A1 A4 A8 AD A6 7F AF A0 B1 B3 AD A4 B1 B2 55 A7 A0 B2 7F AC A0 A3 A4 7F B4 B2 7F A1 AE B3 A7 55 B2 B3 B1 AE AD A6 A4 B1 E8	 50 08
+FA 31 DB
+EA 6B D3
+FA 32 DB
+EA 6C D3
+06 3F
+21 FB DB
+C3 84 3E
+3E 02
+CD A2 4F
+C3 D2 23
+TEXT: 00	89 80 8C 84 92 9C 7F 88 7F A0 AC 7F B2 AE 4F A7 A0 AF AF B8 7F B3 A7 A0 B3 7F B6 A4 7F A0 B1 A4 55 AF A0 B1 B3 AD A4 B1 B2 E7	50 08
+FA 31 DB
+EA 6B D3
+FA 32 DB
+EA 6C D3
+06 3F
+21 44 DC
+C3 84 3E
+3E 04
+CD A2 4F
+C3 D2 23
+    \end{minted}
 \end{document}

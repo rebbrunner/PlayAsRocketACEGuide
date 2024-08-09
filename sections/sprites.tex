@@ -55,7 +55,7 @@ C9              ; ret                   ; Exit and return to normal gameplay saf
     \end{minted}
 
     \subsection{Trainer Card}
-    The trainer card is significantly more tricky and you may feel free to skip this section if you want to save space.  The tricky part is that the Jessie and James sprite is much bigger than the sprite Red uses on the card and it ends up bleeding into badge space.  Because of this, it would be ideal if we had control over how the sprite buffers are being loaded into VRAM.  Unfortunately, loading and interlacing are done simultaneously for speed meaning we have practically no control over how elements are loaded without manually implementing our own interlace and loading functionality.  If you would like to make a custom trainer card, we must segregate out the interlace from the load so we have greater control.  There will be a small amount of lag on loading the card.  For starters, let's create an interlace function by modifying the \textit{CopyData} function (located at 00B1).
+    The trainer card is significantly more tricky and you may feel free to only enter the first code if you need to save space.  The tricky part is that the Jessie and James sprite is much bigger than the sprite Red uses on the card and it ends up bleeding into badge space.  Because of this, it would be ideal if we had control over how the sprite buffers are being loaded into VRAM.  Unfortunately, loading and interlacing are done simultaneously for speed meaning we have practically no control over how elements are loaded without manually implementing our own interlace and loading functionality.  If you would like to make a custom trainer card, we must segregate out the interlace from the load so we have greater control.  There will be a small amount of lag on loading the card.  For starters, let's create an interlace function by modifying the \textit{CopyData} function (located at 00B1).
 
     \begin{minted}[linenos,breaklines]{text}
 18 18           ; jr 18             ; jump over helper function
@@ -110,6 +110,40 @@ C9                  ; ret                       ; return back to normal gameplay
     \end{minted}
 
     \subsection{Backsprite}
-    TODO
+    Backsprites are going to be very similar to trainer cards .  The key difference is we will be pointing the our copy to a location in our PC box that will store a compressed version of our sprite. This will be a lot for people without save injection, so optionally you may choose to point to freespace in the PC box and skip calling uncompression.  Just copy from free space directly instead of using the sprite buffers.  We're going to temporarily hold off actually putting the data for our sprite in at the moment so we can put it in our \textit{data} section that will follow our entire payload.  For now we can just use the top of our payload - this will result in a bunch of garbage being loaded until we place our sprite in.
+
+    \begin{minted}[linenos,breaklines]{text}
+FA 01 83	ld a,(8301)		        Check if VRAM has Red's sprite loaded, overwrite if it does
+D6 33		sub a,33
+20 46		jr nz,60		        jump to end
+CD 61 00	call 0061		        DisableLCD
+3E 00		ld a,00			        0 out bank
+11 1A DB	ld de,XXXX		        XXXX = location of custom compressed sprite
+CD E3 36	call 36e3		        uncompress sprite into bitplanes stored in a188 and a310 respectively
+3E 00		ld a,00
+CD 99 3E	call 3e99		        load SRAM bank 0 where sprite buffers are and enable SRAM
+18 18		jr 18			        Skip over CopyData routine
+01 88 01	ld bc,0188
+21 88 A1	ld hl,a188
+11 00 A0	ld de,a000
+CD CB DA	call .CopyDataExpanded	Interlace the sprite buffers
+01 88 01	ld bc,0188
+21 10 A3	ld hl,a310
+11 01 A0	ld de,a001
+CD CB DA	call .CopyDataExpanded
+01 10 03	ld bc,0310
+21 00 A0	ld hl,a000
+11 10 93	ld de,9310
+CD B1 00	call 00b1		        Copy sprite into VRAM in two locations (one used for intro animation)
+01 10 03	ld bc,0310
+21 10 93	ld hl,9310
+11 00 80	ld de,8000
+CD B1 00	call 00b1
+CD A9 3E	call 3ea9		        DisableSRAM
+CD 7B 00	call 007b		        EnableLCD
+C9		ret
+    \end{minted}
+
+    Once you have finished the last section of this guide and entered your text data, simply drop in the binary for your compressed sprite afterwards and replace line 6 above with the new start address.  To compress your image, you can refer to this online tool \cite{spriteCompressionTool}.
 
 \end{document}

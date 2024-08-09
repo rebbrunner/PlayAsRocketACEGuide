@@ -21,4 +21,131 @@ AF          ; xor a         ; zeros a register
 21 7F DA    ; ld hl,da7f    ; address where active box begins
 C3 6E 16    ; jp 166e       ; Jump to FillMemory
     \end{minted}
+
+    \subsection{Addendum: In Case of Link Rot}
+    All codes by Timo:
+
+    \subsubsection{Setup}
+    \begin{enumerate}
+        \item press b + sel + up on title screen to wipe save to all Fs
+        \item reset game immediately after save box closes\begin{itemize}
+            \item can't load - too early
+            \item can load but can't open pokemon menu - too late
+        \end{itemize}
+        \item enter and exit house
+        \item swap party member 2 \& 10
+        \item Toss 6 master ball x0
+        \item swap potion one above normal items - badges for fly and surf should be added
+        \item toss slot 7 until 19\begin{itemize}
+            \item 11th team member should now know fly
+            \item switch boxes
+        \end{itemize}
+        \item gather:\begin{itemize}
+            \item calcium
+            \item thunderstone
+            \item super, hyper, max potion \& antidote
+            \item great \& pokeball
+        \end{itemize}
+        \item arrange\begin{itemize}
+            \item max potion - 105 (toss 99 + toss 52)
+            \item tm 14  - 213
+            \item thunderstone - 5
+            \item tm 22 - 42
+            \item great ball - 135
+            \item antidote - 48
+            \item pokeball - 134
+            \item hyper potion - 44
+            \item super potion - 32
+            \item tm44 - 201 (toss 55)
+            \item calcium - 243 (toss 13)
+        \end{itemize}
+        \item save
+        \item name eevee: CllU:V:;W;
+        \item view trainer card
+        \item swap calcium and x defend
+    \end{enumerate}
+
+    \subsubsection{Adding 4F}:
+    \begin{minted}[linenos,breaklines]{text}
+g.yx],k(mn)*(pk)
+*(uzz,,.],
+wvuvUlk(mn)(pk)X
+    \end{minted}
+
+    \subsubsection{Nickname Writer}
+    \begin{minted}[linenos,breaklines]{text}
+a b v v ) l l C d d
+j ? ) V t v v v l Mn
+q p y y ] z y p g F
+v u j ? t K K b c c
+R j j m v w w P P p
+l l M v V V u l : female sign
+P x w v v W M m m w
+A B r q x Pk z g g h
+i z , [ o w o x w x
+( ) ) ) ) , , ] ] .
+j ! U ? ? u w v u Mn
+a Pk * t * A S j s t
+r p P W [ : : ; : ;        
+    \end{minted}
+
+    \subsubsection{Cleanup}
+    \begin{minted}[linenos,breaklines]{text}
+21 AE D5	ld hl, $D5AE		; Part of wMissableObjectFlags
+CB AE		res 5, (hl)		; Reenable Eevee's poké ball
+AF		xor a	; a = $00
+21 80 DA	ld hl, wBoxCount
+22		ldi (hl), a		; Set amount of pokémon in box to 0
+3D		dec a	; a = $FF
+22		ldi (hl), a		; Add proper terminator to wBoxSpecies
+AF		xor a	; a = $00
+EA 1D D3	ld (wNumBagItems), a	; Set amount of items to 0
+01 01 59	ld bc, $5900
+CD 2E 3E	call GiveItem		; Gives c amount of b item, giving 1 copy of 4F.
+21 66 DA	ld hl, $DA66		; Part of 4F bootstrap
+36 6A		ld (hl), $6A
+23		inc hl
+36 D6		ld (hl), $D6		; 4F now redirects directly to Nickname Writer
+01 01 59	ld bc, $5901
+C3 2E 3E	jp GiveItem		; Gives c amount of b item, giving 1 copy of 4F.
+    \end{minted}
+
+    \subsubsection{RAM Writer and TimOS}
+    \begin{minted}[linenos,breaklines]{text}
+3E 03 CD 99 3E 21 CD D8 11 53
+BA 01 D7 00 CD B1 00 11 64 DA
+0E 17 C3 B1 00 3E 02 EA 96 CF
+CD 51 2C A7 20 09 FA 95 CF 21
+B9 C7 CD 93 3D C1 E1 D1 CD 57
+7C C3 3D 0F E0 B6 E0 B7 21 00 
+DA CD 56 C7 E5 11 F8 FF 19 54 
+5D 01 0C 00 21 A9 C3 F0 FD CD 
+47 C7 3E 7C 22 7A CD 47 C7 7B 
+CD 47 C7 3E E3 22 1A CD 47 C7
+36 7C 09 13 7D FE 13 20 E5 CD 
+A9 3E 21 50 C4 36 ED E1 18 C5 
+F5 CB 37 CD 4E C7 F1 E6 0F C6 
+F6 F6 80 22 C9 CD 9E C7 87 38 
+36 87 30 05 43 87 C2 98 3E F0 
+FD 80 E0 FD CD 99 3E F0 B5 0F 
+30 24 4E E5 CD 9E C7 F0 B5 0F 
+38 13 0F 30 01 4B 79 83 4F 21 
+50 C4 36 EC 23 CD 47 C7 E1 18 
+E4 71 CD 22 7B E1 18 C1 0F 30 
+02 53 58 0F D8 19 C9 CD 1E 38 
+F0 B5 76 11 00 00 43 87 30 01 
+13 87 30 01 1B 87 30 03 11 F0 
+FF 87 D0 1E 10 C9 05 C7 69 D6
+3E 1C CD 92 3E 06 03 21 53 BA
+11 E8 C6 E5 D5 C5 D5 CD 58 7C
+    \end{minted}
+
+    \subsubsection{Useful memory locations}
+    \begin{itemize}
+        \item Items: d31d
+        \item Rival: D34A-D351 - Rival's Name
+        \item 80 92 87 50 == ASH
+    \end{itemize}
+
+    Nickname writer converter is in references \cite{nameConverter}.
 \end{document}
